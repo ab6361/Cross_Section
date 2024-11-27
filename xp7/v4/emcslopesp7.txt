@@ -1,0 +1,10 @@
+x = 0.7
+EMC Slope Be9: 0.2203$\pm$0.0084 
+EMC Slope B10: 0.1834$\pm$0.0102 
+EMC Slope B11: 0.2374$\pm$0.0108 
+EMC Slope C12: 0.2156$\pm$0.0088 
+EMC Slope Ca40: 0.2849$\pm$0.0086 
+EMC Slope Ca48: 0.3525$\pm$0.0094 
+EMC Slope Ti48: 0.3530$\pm$0.0109 
+EMC Slope Fe54: 0.3320$\pm$0.0117
+EMC Slope Ni58: 0.3368$\pm$0.0115 
