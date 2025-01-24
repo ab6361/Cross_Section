@@ -1,0 +1,6 @@
+Model Slope Ag108: 0.4053$\pm$0.0010 
+EMC Slope Ag108: 0.4107$\pm$0.0156 
+Model Slope C12: 0.2265$\pm$0.0012 
+EMC Slope C12: 0.2228$\pm$0.0132 
+Model Slope C12: 0.2265$\pm$0.0012 
+EMC Slope C12: 0.2228$\pm$0.0132 
