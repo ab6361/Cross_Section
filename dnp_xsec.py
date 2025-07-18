@@ -9,9 +9,23 @@
 
 
 folder = 'inelastic'
-import uproot, time, sys
+import uproot, time, sys, os
 start_time = time.time()
-sys.path.append('/Users/AbSir/Library/CloudStorage/GoogleDrive-asharda@vols.utk.edu/My Drive/xem2')
+
+# Try to locate the "xem2" module in a portable way.  First honor the
+# XEM2_PATH environment variable, then look for a local directory named
+# "xem2" relative to this file.  Fall back to the historical absolute path
+# for backwards compatibility.
+xem2_path = os.environ.get("XEM2_PATH")
+if xem2_path and os.path.isdir(xem2_path):
+    sys.path.append(xem2_path)
+else:
+    local_path = os.path.join(os.path.dirname(__file__), "xem2")
+    if os.path.isdir(local_path):
+        sys.path.append(local_path)
+    else:
+        sys.path.append('/Users/AbSir/Library/CloudStorage/GoogleDrive-asharda@vols.utk.edu/My Drive/xem2')
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
