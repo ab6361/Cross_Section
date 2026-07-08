@@ -1,0 +1,317 @@
+schema_version: 1
+
+analysis:
+  name: xem2_cross_section_ratio
+  type: hms_inclusive_cross_section_ratio
+  source_notebook: "../codex_xsec.ipynb"
+  description: "Configuration extracted from the codex_xsec.ipynb workflow for reproducible target-ratio analysis."
+  threads: 0
+
+run:
+  angle_deg: 20.0
+  numerator_target: C12
+  denominator_target: LD2
+  output_tag: "{numerator_target}_{denominator_target}_{angle_int}"
+  recompute_data: false
+  recompute_mc: false
+  ytar_correction: true
+  leaky_he3_density: false
+
+paths:
+  common_functions_dir: "/Users/AbSir/Library/CloudStorage/GoogleDrive-asharda@vols.utk.edu/My Drive/xem2"
+  common_functions_file: "/Users/AbSir/Library/CloudStorage/GoogleDrive-asharda@vols.utk.edu/My Drive/xem2/common_functions.py"
+  xsec_table_dir: "/Users/AbSir/Library/CloudStorage/GoogleDrive-asharda@vols.utk.edu/My Drive/xem2/xsec_tables"
+  data_root_template: "/Volumes/chaartb/ROOTfiles/HMS_skim_{run}.root"
+  simc_root_template: "/Volumes/chaartb/worksim/hms_{angle_int}deg_{momentum_tag}gev_{target_lower}.root:h10"
+  output_dir: "codex"
+
+inputs:
+  run_dictionaries:
+    source: common_functions.py
+    naming_template: "{target}_{angle_int}_dict"
+    examples:
+      numerator: "C12_20_dict"
+      denominator: "LD2_20_dict"
+      dummy: "Dummy_20_dict"
+  target_information:
+    source: "target_info in common_functions.py"
+    fields:
+      - Z
+      - A
+      - areal_density_or_density
+  radiative_tables:
+    source: ImportRadcor
+    template: "xem2_emc_rc_{target_lower}22_hms.out"
+    columns:
+      V2: "Eprime grid coordinate"
+      V3: "theta grid coordinate"
+      V6: "Born cross section"
+      V9: "radiative cross section used for SIMC event weights"
+      V13: "Coulomb correction factor"
+
+outputs:
+  cached_data_yields: "{output_dir}/data_{target}_{angle_int}.npz"
+  cached_mc_yields: "{output_dir}/mc_{target}_{angle_int}.npz"
+  final_npz: "{output_dir}/{output_tag}.npz"
+  plots:
+    data_yield: "{output_dir}/datayield{target}{angle_int}.png"
+    data_mc_ratio: "{output_dir}/datasim{target}{angle_int}.png"
+    born_cross_section: "{output_dir}/xsec{target}{angle_int}.png"
+    final_emc_ratio: "{output_dir}/isoscalarcorrected_emc{numerator_target}{angle_int}.png"
+
+binning:
+  delta:
+    bins: 16
+    low: -8.0
+    high: 8.0
+  data_mc_constant_fit:
+    x_low: 0.4
+    x_high: 0.8
+  emc_slope_fit:
+    x_low: 0.3
+    x_high: 0.6
+  saved_slope_windows:
+    - [0.3, 0.6]
+    - [0.3, 0.7]
+
+branches:
+  data:
+    dp: H_gtr_dp
+    calorimeter_etottracknorm: H_cal_etottracknorm
+    phi: H_gtr_ph
+    theta: H_gtr_th
+    cherenkov_npe: H_cer_npeSum
+  simc:
+    - hsdeltai
+    - hsdelta
+    - hsytar
+    - hsyptari
+    - hsyptar
+    - hsxptari
+    - hsxptar
+    - stop_id
+
+cuts:
+  data_electron:
+    expression: >
+      abs(H_gtr_dp) < 8
+      and H_cal_etottracknorm > 0.7
+      and abs(H_gtr_ph) < 0.032
+      and abs(H_gtr_th) < 0.085
+      and H_cer_npeSum > 2
+    branches:
+      - H_gtr_dp
+      - H_cal_etottracknorm
+      - H_gtr_ph
+      - H_gtr_th
+      - H_cer_npeSum
+  simc_acceptance:
+    expression: >
+      abs(hsdelta_corrected) <= 8
+      and abs(hsyptar) < 0.032
+      and abs(hsxptar) < 0.085
+      and stop_id == 0
+  final_fit_points:
+    expression: >
+      x_bj >= fit_low
+      and x_bj <= fit_high
+      and isfinite(cross_section_ratio)
+      and isfinite(cross_section_ratio_error)
+      and cross_section_ratio_error > 0
+
+histograms:
+  - name: data_delta_yield
+    kind: numpy_histogram
+    variable: H_gtr_dp
+    bins_ref: binning.delta
+    cut: data_electron
+    weight: "1 / cereff(H_gtr_dp)"
+    role: charge_normalized_yield
+  - name: simc_delta_yield
+    kind: numpy_histogram
+    variable: hsdelta_corrected
+    bins_ref: binning.delta
+    cut: simc_acceptance
+    weight: simc_event_weight
+    role: simulated_yield
+  - name: data_mc_ratio_vs_x
+    kind: graph_with_errors
+    x: x_bj
+    y: data_yield / simc_yield
+    yerr: propagated_data_mc_error
+    fit: constant
+    fit_window_ref: binning.data_mc_constant_fit
+  - name: final_emc_ratio_vs_x
+    kind: graph_with_errors
+    x: x_bj
+    y: isoscalar_corrected_ratio
+    yerr: isoscalar_corrected_ratio_error
+    fit: weighted_line
+    fit_window_ref: binning.emc_slope_fit
+
+corrections:
+  cherenkov_efficiency:
+    applies_to:
+      - data
+      - simc
+    function: cereff
+    weight_expression: "1 / cereff(delta)"
+  charge_symmetric_background:
+    applies_to: data
+    function: csb2
+    ratio_expression: "R = csb2(Eprime_bin_centers, target, angle_deg)"
+    corrected_yield: "raw_yield / (1 + R)"
+    corrected_error: "sqrt(raw_counts) * report_scale / (1 + R)"
+  numerator_contamination:
+    applies_to: numerator_target
+    rules:
+      Ca48:
+        contaminant: Ca40
+        scale: 0.113
+      B10:
+        contaminant: C12
+        scale: 0.231
+      B11:
+        contaminant: C12
+        scale: 0.236
+      He3:
+        contaminant: Dummy
+        scale: 0.2165
+      LD2:
+        contaminant: Dummy
+        scale: 0.2165
+      He4:
+        contaminant: Dummy
+        scale: 0.27642
+      LH2:
+        contaminant: Dummy
+        scale: 0.27642
+    operation: "yield_target - scale * yield_contaminant"
+    error_operation: "sqrt(error_target^2 + (scale * error_contaminant)^2)"
+  denominator_dummy_subtraction:
+    applies_when_denominator_in:
+      - LD2
+      - LH2
+      - He3
+      - He4
+    contaminant: Dummy
+    scale: 0.2165147635655024
+    operation: "yield_denominator - scale * yield_dummy"
+  cryo_boiling:
+    applies_to:
+      - LD2
+      - LH2
+      - He3
+      - He4
+    function: cryo_boiling
+    operation: "yield * cryo_boiling(momentum, target_angle)"
+  simc_delta_polynomial:
+    input: hsdelta
+    output: hsdelta_corrected
+    expression: >
+      0.990337*x - 0.00236077*x^2 + 0.000286814*x^3
+      + 2.09878e-6*x^4 - 2.48674e-6*x^5 + 1.8646e-7*x^6
+  simc_ytar_acceptance:
+    enabled_ref: run.ytar_correction
+    expression: "-0.00737348 * hsytar^2 - 0.00750935 * hsytar + 0.99897188"
+  simc_jacobian:
+    expression: "(1 + hsxptar^2 + hsyptar^2)^(-1.5)"
+  coulomb_correction:
+    source: radiative_tables.V13
+    operation: "born_cross_section * coulomb_correction_factor"
+  isoscalar:
+    function: jra_np
+    neutron_to_proton_ratio: "jra_np(x_bj, Q2)"
+    factor_expression: "(A / 2 * (1 + n_over_p)) / (Z + N * n_over_p)"
+
+derived_columns:
+  - name: central_momentum
+    expression: "p * (1.0 + (-0.001 - 0.002902 * exp(-0.5 * ((p - 4.819145) / 0.483068)^2)))"
+  - name: Eprime_bin_centers
+    expression: "central_momentum * (1 + 0.01 * delta_bin_center)"
+  - name: theta_simc_deg
+    expression: "degrees(acos((cos(theta_spectrometer) + hsyptar * sin(theta_spectrometer)) / sqrt(1 + hsxptar^2 + hsyptar^2)))"
+  - name: x_bj
+    expression: "(4 * Ei * Eprime * sin(theta / 2)^2) / (2 * Mp * (Ei - Eprime))"
+  - name: Q2
+    expression: "4 * Ei * Eprime * sin(theta / 2)^2"
+  - name: simc_luminosity
+    expression: "(((target_thickness * simulated_charge / A) * N_A) / Q_E) * 1e-39"
+  - name: simc_scale
+    expression: "luminosity * domega * (Eprime_max - Eprime_min) / nentries"
+  - name: simc_event_weight
+    expression: "radiative_xsec * simc_scale * optional(ytar_weight) * jacobian_weight * delta_weight * cherenkov_efficiency_weight"
+  - name: data_mc_ratio
+    expression: "corrected_data_yield / simc_yield"
+  - name: born_cross_section
+    expression: "data_mc_ratio * model_born_cross_section * coulomb_correction_factor"
+  - name: per_nucleon_cross_section_ratio
+    expression: "(born_numerator / born_denominator) / (A_numerator / A_denominator)"
+  - name: isoscalar_corrected_ratio
+    expression: "per_nucleon_cross_section_ratio * isoscalar_factor"
+  - name: emc_slope
+    expression: "weighted_linear_fit(x_bj, isoscalar_corrected_ratio, isoscalar_corrected_ratio_error, fit_window)"
+
+modules:
+  data_yield_extraction:
+    enabled: true
+    function: arrays_nucl
+    inputs:
+      - data_root_template
+      - run_dictionaries
+      - cuts.data_electron
+      - corrections.cherenkov_efficiency
+      - corrections.charge_symmetric_background
+    outputs:
+      - cached_data_yields
+      - plots.data_yield
+  simc_yield_extraction:
+    enabled: true
+    function: mc_array
+    inputs:
+      - simc_root_template
+      - radiative_tables
+      - cuts.simc_acceptance
+      - corrections.simc_delta_polynomial
+      - corrections.simc_ytar_acceptance
+      - corrections.simc_jacobian
+    outputs:
+      - cached_mc_yields
+  born_cross_section_extraction:
+    enabled: true
+    function: get_xsec
+    inputs:
+      - data_mc_ratio
+      - radiative_tables.V6
+      - corrections.coulomb_correction
+  ratio_and_slope_fit:
+    enabled: true
+    functions:
+      - weighted_linfit
+      - jra_np
+    outputs:
+      - final_npz
+      - plots.final_emc_ratio
+
+saved_final_arrays:
+  - bjx
+  - csr
+  - csr_errors
+  - non_iso_csr
+  - iso_fac
+  - born_n
+  - berr_n
+  - born_d
+  - berr_d
+  - q2
+  - yield_ratio_dtg
+  - ratio_errors_dtg
+  - ratio_errors_ntg
+  - ratio_yield_ntg
+  - slope
+  - slope_err
+
+notes:
+  - "This file is a first-pass external analysis contract extracted from codex_xsec.ipynb."
+  - "The YAML mirrors Casey Morean's suggested pattern of defining cuts, histograms, inputs, outputs, and modules outside the analysis code."
+  - "It is not yet a complete executable replacement for the notebook; an executor still needs to map these fields onto the existing helper functions."
